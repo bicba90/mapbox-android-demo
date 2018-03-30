@@ -133,7 +133,7 @@ public class AddRainFallStyleActivity extends AppCompatActivity implements OnMap
       layer.setProperties(PropertyFactory.visibility(VISIBLE),
         fillColor(interpolate(Expression.exponential(1f),
           get("value"),
-          stop(8, Expression.rgb(240, 20, 160)),
+          stop(8, Expression.rgb(20, 160, 240)),
           stop(18, Expression.rgb(20, 190, 240)),
           stop(36, Expression.rgb(20, 220, 240)),
           stop(54, Expression.rgb(20, 250, 240)),

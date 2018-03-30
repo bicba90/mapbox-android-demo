@@ -18,7 +18,6 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import static com.mapbox.mapboxsdk.style.expressions.Expression.eq;
-import static com.mapbox.mapboxsdk.style.expressions.Expression.get;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.literal;
 
 public class MultipleGeometriesActivity extends AppCompatActivity implements OnMapReadyCallback {
@@ -64,7 +63,7 @@ public class MultipleGeometriesActivity extends AppCompatActivity implements OnM
     borderOutlineLayer.setProperties(
       PropertyFactory.fillColor(Color.RED),
       PropertyFactory.fillOpacity(.4f));
-    borderOutlineLayer.setFilter(eq(get("$type"), literal("Polygon")));
+    borderOutlineLayer.setFilter(eq(literal("$type"), literal("Polygon")));
     mapboxMap.addLayer(borderOutlineLayer);
   }
 
@@ -74,7 +73,7 @@ public class MultipleGeometriesActivity extends AppCompatActivity implements OnM
     pointsLayer.setProperties(
       PropertyFactory.circleColor(Color.YELLOW),
       PropertyFactory.circleRadius(3f));
-    pointsLayer.setFilter(eq(get("$type"), literal("Point")));
+    pointsLayer.setFilter(eq(literal("$type"), literal("Point")));
     mapboxMap.addLayer(pointsLayer);
   }
 
