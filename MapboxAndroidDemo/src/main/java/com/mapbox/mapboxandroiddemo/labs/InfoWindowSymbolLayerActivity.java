@@ -12,6 +12,7 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.TextView;
@@ -55,6 +56,7 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
   private String SELECTED_MARKER_LAYER_ID = "SELECTED_MARKER_LAYER_ID";
   private String FEATURE_TITLE_PROPERTY_KEY = "FEATURE_TITLE_PROPERTY_KEY";
   private String FEATURE_DESCRIPTION_PROPERTY_KEY = "FEATURE_DESCRIPTION_PROPERTY_KEY";
+  private String TAG = "InfoWindowSymbolLayerActivity";
 
 
   @Override
@@ -143,18 +145,25 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
   @Override
   public void onMapClick(@NonNull LatLng point) {
 
+    Log.d(TAG, "onMapClick: Clicked on map");
+
     final SymbolLayer markerSymbolLayer = (SymbolLayer) mapboxMap.getLayer(SELECTED_MARKER_LAYER_ID);
 
     final PointF screenPoint = mapboxMap.getProjection().toScreenLocation(point);
+    Log.d(TAG, "onMapClick: screenPoint = " + screenPoint);
+
     List<Feature> features = mapboxMap.queryRenderedFeatures(screenPoint, MAP_LOCATION_LAYER_ID);
     List<Feature> selectedFeature = mapboxMap.queryRenderedFeatures(screenPoint, SELECTED_MARKER_LAYER_ID);
 
     if (selectedFeature.size() > 0 && markerSelected) {
+      Log.d(TAG, "onMapClick: selectedFeature.size() > 0 && markerSelected");
       return;
     }
 
     if (features.isEmpty()) {
+      Log.d(TAG, "onMapClick: features.isEmpty()");
       if (markerSelected) {
+        Log.d(TAG, "onMapClick: markerSelected");
         runDeselectMarkerIconAnimation(markerSymbolLayer);
       }
       return;
@@ -175,9 +184,13 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
     }
 
     if (!features.isEmpty()) {
+      Log.d(TAG, "onMapClick: !features.isEmpty()");
       // we received a click event on the callout layer
       Feature feature = features.get(0);
+      Log.d(TAG, "onMapClick: feature = " + feature.toString());
       PointF symbolScreenPoint = mapboxMap.getProjection().toScreenLocation(convertToLatLng(feature));
+      Log.d(TAG, "onMapClick: symbolScreenPoint = " + symbolScreenPoint);
+
       handleClickCallout(feature, screenPoint, symbolScreenPoint);
     } else {
       // we didn't find a click event on callout layer, try clicking maki layer
@@ -235,27 +248,32 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
    * @param symbolScreenPoint the point of the symbol on screen
    */
   private void handleClickCallout(Feature feature, PointF screenPoint, PointF symbolScreenPoint) {
-    View view = viewMap.get(feature.getStringProperty(FEATURE_TITLE_PROPERTY_KEY));
-    View textContainer = view.findViewById(R.id.text_container);
+    Log.d(TAG, "handleClickCallout: ");
+    if (viewMap != null) {
+      View view = viewMap.get(feature.getStringProperty(FEATURE_TITLE_PROPERTY_KEY));
+      View textContainer = view.findViewById(R.id.text_container);
 
-    // create hitbox for textView
-    Rect hitRectText = new Rect();
-    textContainer.getHitRect(hitRectText);
+      // create hit box for textView
+      Rect hitRectText = new Rect();
+      textContainer.getHitRect(hitRectText);
 
-    // move hitbox to location of symbol
-    hitRectText.offset((int) symbolScreenPoint.x, (int) symbolScreenPoint.y);
+      // move hit box to location of symbol
+      hitRectText.offset((int) symbolScreenPoint.x, (int) symbolScreenPoint.y);
 
-    // offset vertically to match anchor behaviour
-    hitRectText.offset(0, -view.getMeasuredHeight());
+      // offset vertically to match anchor behaviour
+      hitRectText.offset(0, -view.getMeasuredHeight());
 
-    // hit test if clicked point is in textview hit box
-    if (!hitRectText.contains((int) screenPoint.x, (int) screenPoint.y)) {
-      List<Feature> featureList = mapLocationFeatureCollection.getFeatures();
-      for (int i = 0; i < featureList.size(); i++) {
-        if (featureList.get(i).getStringProperty(
-          FEATURE_TITLE_PROPERTY_KEY).equals(feature.getStringProperty(FEATURE_TITLE_PROPERTY_KEY))) {
+      // hit test if clicked point is in textview hit box
+      if (!hitRectText.contains((int) screenPoint.x, (int) screenPoint.y)) {
+        List<Feature> featureList = mapLocationFeatureCollection.getFeatures();
+        for (int i = 0; i < featureList.size(); i++) {
+          if (featureList.get(i).getStringProperty(
+            FEATURE_TITLE_PROPERTY_KEY).equals(feature.getStringProperty(FEATURE_TITLE_PROPERTY_KEY))) {
+          }
         }
       }
+    } else {
+      Log.d(TAG, "handleClickCallout: viewMap == null");
     }
   }
 
@@ -317,7 +335,6 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
           imagesMap.put(titleForBubbleWindow, bitmap);
           viewMap.put(titleForBubbleWindow, view);
         }
-
         return imagesMap;
       } else {
         return null;
@@ -328,10 +345,13 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
     protected void onPostExecute(HashMap<String, Bitmap> bitmapHashMap) {
       super.onPostExecute(bitmapHashMap);
       if (bitmapHashMap != null) {
+        Log.d(TAG, "onPostExecute: bitmapHashMap != null");
         setImageGenResults(viewMap, bitmapHashMap);
         if (refreshSource) {
           refreshSource();
         }
+      } else {
+        Log.d(TAG, "onPostExecute: bitmapHashMap == null");
       }
     }
 
@@ -342,9 +362,9 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
       if (mapboxMapForViewGeneration != null) {
         // calling addImages is faster as separate addImage calls for each bitmap.
         mapboxMapForViewGeneration.addImages(imageMap);
-        Timber.d(TAG, "setImageGenResults: images added");
+        Log.d(TAG, "setImageGenResults: images added");
       }
-      // need to store reference to views to be able to use them as hitboxes for click events.
+      // need to store reference to views to be able to use them as hit boxes for click events.
       this.viewMap = viewMap;
     }
 
