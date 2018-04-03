@@ -12,12 +12,9 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.ImageView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.mapbox.mapboxandroiddemo.R;
 import com.mapbox.mapboxsdk.Mapbox;
@@ -28,7 +25,6 @@ import com.mapbox.mapboxsdk.maps.OnMapReadyCallback;
 import com.mapbox.mapboxsdk.style.layers.PropertyFactory;
 import com.mapbox.mapboxsdk.style.layers.SymbolLayer;
 import com.mapbox.mapboxsdk.style.sources.GeoJsonSource;
-import com.mapbox.mapboxsdk.style.sources.Source;
 import com.mapbox.services.commons.geojson.Feature;
 import com.mapbox.services.commons.geojson.FeatureCollection;
 import com.mapbox.services.commons.geojson.Point;
@@ -39,15 +35,28 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import timber.log.Timber;
+
+import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconImage;
+
 public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
   OnMapReadyCallback, MapboxMap.OnMapClickListener {
 
   private MapView mapView;
   private MapboxMap mapboxMap;
   private boolean markerSelected = false;
-  private FeatureCollection featureCollection;
+  private FeatureCollection mapLocationFeatureCollection;
   private HashMap<String, View> viewMap;
-  private GeoJsonSource geoJsonSource;
+  private GeoJsonSource mapLocationsGeoJsonSource;
+  private String GEOJSON_SOURCE_ID = "GEOJSON_SOURCE_ID";
+  private String SELECTED_MARKER_GEOJSON_SOURCE_ID = "SELECTED_MARKER_GEOJSON_SOURCE_ID";
+  private String MARKER_IMAGE_ID = "MARKER_IMAGE_ID";
+  private String MAP_LOCATION_LAYER_ID = "MAP_LOCATION_LAYER_ID";
+  private String SELECTED_MARKER_LAYER_ID = "SELECTED_MARKER_LAYER_ID";
+  private String FEATURE_TITLE_PROPERTY_KEY = "FEATURE_TITLE_PROPERTY_KEY";
+  private String FEATURE_DESCRIPTION_PROPERTY_KEY = "FEATURE_DESCRIPTION_PROPERTY_KEY";
+
+
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
@@ -69,49 +78,76 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
 
     this.mapboxMap = mapboxMap;
 
-    List<Feature> markerCoordinates = new ArrayList<>();
-    markerCoordinates.add(Feature.fromGeometry(
-      Point.fromCoordinates(Position.fromCoordinates(-66.9891357421875, 10.466205555063882))) // Caracas, Venezuela
-    );
+    // Create list of Feature objects
+    List<Feature> mapLocationCoordinates = new ArrayList<>();
 
-    featureCollection = FeatureCollection.fromFeatures(markerCoordinates);
+    // Create a single Feature location in Caracas, Venezuela
+    Feature singleFeature = Feature.fromGeometry(Point.fromCoordinates(Position.fromCoordinates(
+      -66.910519, 10.503250)));
 
-    geoJsonSource = new GeoJsonSource("marker-source", featureCollection);
-    mapboxMap.addSource(geoJsonSource);
+    // Add a String property to the Feature to be used in the title of the popup bubble window
+    singleFeature.addStringProperty(FEATURE_TITLE_PROPERTY_KEY, "Hello World!");
+    singleFeature.addStringProperty(FEATURE_DESCRIPTION_PROPERTY_KEY, "Welcome to my marker");
 
-    Bitmap icon = BitmapFactory.decodeResource(
+    // Add the Feature to the List<> of Feature objects
+    mapLocationCoordinates.add(singleFeature);
+
+    // Add the list as a parameter to create a FeatureCollection
+    mapLocationFeatureCollection = FeatureCollection.fromFeatures(mapLocationCoordinates);
+
+    // Create a GeoJSON source with a unique ID and a FeatureCollection
+    mapLocationsGeoJsonSource = new GeoJsonSource(GEOJSON_SOURCE_ID, mapLocationFeatureCollection);
+
+    // Add the GeoJSON source to the map
+    mapboxMap.addSource(mapLocationsGeoJsonSource);
+
+    // Create a bitmap that will serve as the visual marker icon image
+    Bitmap redMarkerIcon = BitmapFactory.decodeResource(
       InfoWindowSymbolLayerActivity.this.getResources(), R.drawable.red_marker);
 
-    // Add the marker image to map
-    mapboxMap.addImage("my-marker-image", icon);
+    // Add the marker icon image to the map
+    mapboxMap.addImage(MARKER_IMAGE_ID, redMarkerIcon);
 
-    SymbolLayer markers = new SymbolLayer("marker-layer", "marker-source")
-      .withProperties(PropertyFactory.iconImage("my-marker-image"));
-    mapboxMap.addLayer(markers);
+    // Create a SymbolLayer with a unique id and a source. In this case, it's the GeoJSON source
+    // that was created above. The red marker icon is added to the layer using run-time styling.
+    SymbolLayer mapLocationSymbolLayer = new SymbolLayer(MAP_LOCATION_LAYER_ID, GEOJSON_SOURCE_ID)
+      .withProperties(iconImage(MARKER_IMAGE_ID));
+    mapboxMap.addLayer(mapLocationSymbolLayer);
 
-    // Add the selected marker source and layer
-    FeatureCollection emptySource = FeatureCollection.fromFeatures(new Feature[] {});
-    Source selectedMarkerSource = new GeoJsonSource("selected-marker", emptySource);
+    // Create an empty FeatureCollection that will eventually have the selected (i.e. tapped on) icon
+    FeatureCollection emptyFeatureCollectionForSelectedIcon = FeatureCollection.fromFeatures(new Feature[] {});
+
+    // Create a GeoJSONSource with a unique ID and the empty FeatureCollection created above
+    GeoJsonSource selectedMarkerSource = new GeoJsonSource(
+      SELECTED_MARKER_GEOJSON_SOURCE_ID, emptyFeatureCollectionForSelectedIcon);
+
+    // Add the GeoJSONSource to the map
     mapboxMap.addSource(selectedMarkerSource);
 
-    SymbolLayer selectedMarker = new SymbolLayer("selected-marker-layer", "selected-marker")
-      .withProperties(PropertyFactory.iconImage("my-marker-image"));
-    mapboxMap.addLayer(selectedMarker);
+    // Create a second SymbolLayer that will show any selected marker icons.
+    SymbolLayer selectedMarkerSymbolLayer = new SymbolLayer(SELECTED_MARKER_LAYER_ID, SELECTED_MARKER_GEOJSON_SOURCE_ID)
+      .withProperties(iconImage(MARKER_IMAGE_ID));
 
+    // Add the layer to the map
+    mapboxMap.addLayer(selectedMarkerSymbolLayer);
+
+    // Initialize the map click listener
     mapboxMap.addOnMapClickListener(this);
 
+    // Start the async task that creates the actual popup bubble window. This window will appear once a
+    // SymbolLayer icon is tapped on.
     new GenerateViewIconTask(this, false, mapboxMap,
-      geoJsonSource).execute(featureCollection);
+      mapLocationsGeoJsonSource).execute(mapLocationFeatureCollection);
   }
 
   @Override
   public void onMapClick(@NonNull LatLng point) {
 
-    final SymbolLayer marker = (SymbolLayer) mapboxMap.getLayer("selected-marker-layer");
+    final SymbolLayer markerSymbolLayer = (SymbolLayer) mapboxMap.getLayer(SELECTED_MARKER_LAYER_ID);
 
-    final PointF pixel = mapboxMap.getProjection().toScreenLocation(point);
-    List<Feature> features = mapboxMap.queryRenderedFeatures(pixel, "marker-layer");
-    List<Feature> selectedFeature = mapboxMap.queryRenderedFeatures(pixel, "selected-marker-layer");
+    final PointF screenPoint = mapboxMap.getProjection().toScreenLocation(point);
+    List<Feature> features = mapboxMap.queryRenderedFeatures(screenPoint, MAP_LOCATION_LAYER_ID);
+    List<Feature> selectedFeature = mapboxMap.queryRenderedFeatures(screenPoint, SELECTED_MARKER_LAYER_ID);
 
     if (selectedFeature.size() > 0 && markerSelected) {
       return;
@@ -119,35 +155,50 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
 
     if (features.isEmpty()) {
       if (markerSelected) {
-        deselectMarker(marker);
+        runDeselectMarkerIconAnimation(markerSymbolLayer);
       }
       return;
     }
 
     FeatureCollection featureCollection = FeatureCollection.fromFeatures(
       new Feature[] {Feature.fromGeometry(features.get(0).getGeometry())});
-    GeoJsonSource source = mapboxMap.getSourceAs("selected-marker");
+    GeoJsonSource source = mapboxMap.getSourceAs(SELECTED_MARKER_GEOJSON_SOURCE_ID);
     if (source != null) {
       source.setGeoJson(featureCollection);
     }
 
     if (markerSelected) {
-      deselectMarker(marker);
+      runDeselectMarkerIconAnimation(markerSymbolLayer);
     }
     if (features.size() > 0) {
-      selectMarker(marker);
+      runSelectMarkerIconAnimation(markerSymbolLayer);
+    }
+
+    if (!features.isEmpty()) {
+      // we received a click event on the callout layer
+      Feature feature = features.get(0);
+      PointF symbolScreenPoint = mapboxMap.getProjection().toScreenLocation(convertToLatLng(feature));
+      handleClickCallout(feature, screenPoint, symbolScreenPoint);
+    } else {
+      // we didn't find a click event on callout layer, try clicking maki layer
+      Timber.d("onMapClick: didn't find a click event on callout layer");
     }
   }
 
-  private void selectMarker(final SymbolLayer marker) {
+  private LatLng convertToLatLng(Feature feature) {
+    Point symbolPoint = (Point) feature.getGeometry();
+    Position position = symbolPoint.getCoordinates();
+    return new LatLng(position.getLatitude(), position.getLongitude());
+  }
+
+  private void runSelectMarkerIconAnimation(final SymbolLayer symbolLayer) {
     ValueAnimator markerAnimator = new ValueAnimator();
     markerAnimator.setObjectValues(1f, 2f);
     markerAnimator.setDuration(300);
     markerAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-
       @Override
       public void onAnimationUpdate(ValueAnimator animator) {
-        marker.setProperties(
+        symbolLayer.setProperties(
           PropertyFactory.iconSize((float) animator.getAnimatedValue())
         );
       }
@@ -156,15 +207,14 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
     markerSelected = true;
   }
 
-  private void deselectMarker(final SymbolLayer marker) {
+  private void runDeselectMarkerIconAnimation(final SymbolLayer symbolLayer) {
     ValueAnimator markerAnimator = new ValueAnimator();
     markerAnimator.setObjectValues(2f, 1f);
     markerAnimator.setDuration(300);
     markerAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-
       @Override
       public void onAnimationUpdate(ValueAnimator animator) {
-        marker.setProperties(
+        symbolLayer.setProperties(
           PropertyFactory.iconSize((float) animator.getAnimatedValue())
         );
       }
@@ -185,7 +235,7 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
    * @param symbolScreenPoint the point of the symbol on screen
    */
   private void handleClickCallout(Feature feature, PointF screenPoint, PointF symbolScreenPoint) {
-    View view = viewMap.get(feature.getStringProperty(PROPERTY_TITLE));
+    View view = viewMap.get(feature.getStringProperty(FEATURE_TITLE_PROPERTY_KEY));
     View textContainer = view.findViewById(R.id.text_container);
 
     // create hitbox for textView
@@ -200,35 +250,18 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
 
     // hit test if clicked point is in textview hit box
     if (!hitRectText.contains((int) screenPoint.x, (int) screenPoint.y)) {
-      List<Feature> featureList = featureCollection.getFeatures();
+      List<Feature> featureList = mapLocationFeatureCollection.getFeatures();
       for (int i = 0; i < featureList.size(); i++) {
-        if (featureList.get(i).getStringProperty(PROPERTY_TITLE).equals(feature.getStringProperty(PROPERTY_TITLE))) {
-          toggleFavourite(i);
+        if (featureList.get(i).getStringProperty(
+          FEATURE_TITLE_PROPERTY_KEY).equals(feature.getStringProperty(FEATURE_TITLE_PROPERTY_KEY))) {
         }
       }
     }
   }
 
-  /**
-   * Set the favourite state of a feature based on the index.
-   *
-   * @param index the index of the feature to favourite/de-favourite
-   */
-  private void toggleFavourite(int index) {
-    Feature feature = featureCollection.getFeatures().get(index);
-    String title = feature.getStringProperty(PROPERTY_TITLE);
-    boolean currentState = feature.getBooleanProperty(PROPERTY_FAVOURITE);
-    feature.getProperties().addProperty(PROPERTY_FAVOURITE, !currentState);
-    View view = viewMap.get(title);
-
-    Bitmap bitmap = SymbolGenerator.generate(view);
-    mapboxMap.addImage(title, bitmap);
-    refreshSource();
-  }
-
   private void refreshSource() {
-    if (geoJsonSource != null && featureCollection != null) {
-      geoJsonSource.setGeoJson(featureCollection);
+    if (mapLocationsGeoJsonSource != null && mapLocationFeatureCollection != null) {
+      mapLocationsGeoJsonSource.setGeoJson(mapLocationFeatureCollection);
     }
   }
 
@@ -272,17 +305,17 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
         for (Feature feature : asyncFeatureCollection.getFeatures()) {
           View view = inflater.inflate(R.layout.symbol_layer_info_window_layout_callout, null);
 
-          String featureRankNum = feature.getStringProperty(CALLOUT_LAYER_BUBBLE_RANK);
-
+          String titleForBubbleWindow = feature.getStringProperty("FEATURE_TITLE_PROPERTY_KEY");
           TextView titleNumTextView = view.findViewById(R.id.symbol_layer_info_window_layout_callout_title);
-          titleNumTextView.setText(featureRankNum);
+          titleNumTextView.setText(titleForBubbleWindow);
 
+          String descriptionForBubbleWindow = feature.getStringProperty("FEATURE_DESCRIPTION_PROPERTY_KEY");
           TextView descriptionNumTextView = view.findViewById(R.id.symbol_layer_info_window_layout_callout_description);
-          descriptionNumTextView.setText(featureRankNum);
+          descriptionNumTextView.setText(descriptionForBubbleWindow);
 
           Bitmap bitmap = SymbolGenerator.generate(view);
-          imagesMap.put(featureRankNum, bitmap);
-          viewMap.put(featureRankNum, view);
+          imagesMap.put(titleForBubbleWindow, bitmap);
+          viewMap.put(titleForBubbleWindow, view);
         }
 
         return imagesMap;
@@ -309,8 +342,7 @@ public class InfoWindowSymbolLayerActivity extends AppCompatActivity implements
       if (mapboxMapForViewGeneration != null) {
         // calling addImages is faster as separate addImage calls for each bitmap.
         mapboxMapForViewGeneration.addImages(imageMap);
-        Log.d(TAG, "setImageGenResults: images added");
-
+        Timber.d(TAG, "setImageGenResults: images added");
       }
       // need to store reference to views to be able to use them as hitboxes for click events.
       this.viewMap = viewMap;
